@@ -120,7 +120,13 @@ function App() {
       <div className="container">
         {movies.map((movie) => (
           <div className="movie" key={movie.imdbID}>
-            <img src={movie.Poster} />
+           <img
+  src={
+    movie.Poster && movie.Poster !== "N/A"
+      ? movie.Poster
+      : "https://via.placeholder.com/300x450?text=No+Image"
+  }
+/>
 
             <button
               className="fav"

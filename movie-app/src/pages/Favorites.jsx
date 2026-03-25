@@ -32,7 +32,13 @@ function Favorites() {
       <div className="fav-grid">
         {favorites.map((movie) => (
           <div className="fav-card" key={movie.imdbID}>
-            <img src={movie.Poster} />
+            <img
+  src={
+    movie.Poster && movie.Poster !== "N/A"
+      ? movie.Poster
+      : "https://via.placeholder.com/300x450?text=No+Image"
+  }
+/>
 
             <h4>{movie.Title}</h4>
 
