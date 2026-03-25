@@ -6,31 +6,70 @@ const KEY = "c9bb8db5";
 
 function App() {
   const [user, setUser] = useState(localStorage.getItem("user"));
-
   const [movies, setMovies] = useState([]);
   const [search, setSearch] = useState("");
-
   const [favoritesOpen, setFavoritesOpen] = useState(false);
-
   const [favorites, setFavorites] = useState(
     JSON.parse(localStorage.getItem("fav")) || []
   );
+  const [email, setEmail] = useState("");
+
+  // ✅ POPUP STATE
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
 
   const random = ["batman", "avengers", "spiderman", "joker"];
 
+  // ✅ Safe image
+  const getImage = (poster) => {
+    if (!poster || poster === "N/A") {
+      return "https://dummyimage.com/300x450/000/fff&text=No+Image";
+    }
+    return poster;
+  };
+
+  // ✅ FETCH MOVIES
   useEffect(() => {
     const query =
-      search === ""
+      search.trim() === ""
         ? random[Math.floor(Math.random() * random.length)]
         : search;
 
     fetch(`${API}?apikey=${KEY}&s=${query}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.Search) setMovies(data.Search);
-      });
+        if (data && data.Search) {
+          const uniqueMovies = [
+            ...new Map(
+              data.Search.map((m) => [m.imdbID, m])
+            ).values(),
+          ];
+          setMovies(uniqueMovies);
+        } else {
+          setMovies([]);
+        }
+      })
+      .catch(() => setMovies([]));
   }, [search]);
 
+  // ✅ FETCH MOVIE DETAILS (IMPORTANT FIX)
+  const getMovieDetails = (id) => {
+    fetch(`${API}?apikey=${KEY}&i=${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        console.log("DETAILS:", data); // debug
+
+        if (data && data.Response !== "False") {
+          setSelectedMovie(data);
+          setShowPopup(true);
+        } else {
+          alert("Movie details not found");
+        }
+      })
+      .catch(() => alert("Error fetching details"));
+  };
+
+  // ✅ FAVORITES
   const toggleFav = (movie) => {
     const exist = favorites.find(
       (f) => f.imdbID === movie.imdbID
@@ -59,7 +98,7 @@ function App() {
     localStorage.setItem("fav", JSON.stringify(updated));
   };
 
-  /* LOGIN PAGE */
+  /* ================= LOGIN ================= */
 
   if (!user) {
     return (
@@ -68,18 +107,20 @@ function App() {
           <h1>MOVIE PAGE</h1>
           <h2>Sign In</h2>
 
-          <input placeholder="Email" id="email" />
           <input
-            type="password"
-            placeholder="Password"
-            id="pass"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
+
+          <input type="password" placeholder="Password" />
 
           <button
             onClick={() => {
-              const email =
-                document.getElementById("email").value;
-
+              if (!email) {
+                alert("Enter email");
+                return;
+              }
               localStorage.setItem("user", email);
               setUser(email);
             }}
@@ -91,7 +132,7 @@ function App() {
     );
   }
 
-  /* MOVIE PAGE */
+  /* ================= MAIN UI ================= */
 
   return (
     <div>
@@ -99,10 +140,17 @@ function App() {
       <nav className="navbar">
         <h2>MOVIE PAGE</h2>
 
-        <button
-          onClick={() => setFavoritesOpen(true)}
-        >
+        <button onClick={() => setFavoritesOpen(true)}>
           ❤️ Favorites
+        </button>
+
+        <button
+          onClick={() => {
+            localStorage.removeItem("user");
+            setUser(null);
+          }}
+        >
+          Logout
         </button>
       </nav>
 
@@ -110,81 +158,135 @@ function App() {
       <div className="controls">
         <input
           placeholder="Search movies..."
-          onChange={(e) =>
-            setSearch(e.target.value)
-          }
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {/* MOVIES */}
-      <div className="container">
-        {movies.map((movie) => (
-          <div className="movie" key={movie.imdbID}>
-           <img
-  src={
-    movie.Poster && movie.Poster !== "N/A"
-      ? movie.Poster
-      : "https://via.placeholder.com/300x450?text=No+Image"
-  }
-/>
+     {/* MOVIES */}
+<div className="container">
+  {movies.length > 0 ? (
+    movies.map((movie) => (
+      <div
+        className="movie"
+        key={movie.imdbID}
+        onClick={() => getMovieDetails(movie.imdbID)}
+      >
+        <img
+          src={getImage(movie.Poster)}
+          alt={movie.Title}
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src =
+              "https://dummyimage.com/300x450/000/fff&text=No+Image";
+          }}
+        />
 
-            <button
-              className="fav"
-              onClick={() => toggleFav(movie)}
-            >
-              {favorites.find(
-                (f) => f.imdbID === movie.imdbID
-              )
-                ? "❤️"
-                : "🤍"}
-            </button>
+        {/* ❤️ FAVORITE BUTTON (stop click bubbling) */}
+        <button
+          className="fav"
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ IMPORTANT
+            toggleFav(movie);
+          }}
+        >
+          {favorites.some(
+            (f) => f.imdbID === movie.imdbID
+          )
+            ? "❤️"
+            : "🤍"}
+        </button>
 
-            <h4>{movie.Title}</h4>
-          </div>
-        ))}
+        <h4>{movie.Title}</h4>
       </div>
+    ))
+  ) : (
+    <p style={{ textAlign: "center" }}>
+      No movies found
+    </p>
+  )}
+</div>
 
       {/* FAVORITES POPUP */}
-
       {favoritesOpen && (
         <div
           className="popup"
-          onClick={() =>
-            setFavoritesOpen(false)
-          }
+          onClick={() => setFavoritesOpen(false)}
         >
           <div
             className="popup-card"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(e) => e.stopPropagation()}
           >
             <h2>My Favorites</h2>
 
             <div className="fav-grid">
-              {favorites.map((movie) => (
-                <div
-                  className="fav-card"
-                  key={movie.imdbID}
-                >
-                  <img src={movie.Poster} />
-
-                  <p>{movie.Title}</p>
-
-                  <button
-                    className="remove-btn"
-                    onClick={() =>
-                      removeFav(movie.imdbID)
-                    }
+              {favorites.length > 0 ? (
+                favorites.map((movie) => (
+                  <div
+                    className="fav-card"
+                    key={movie.imdbID}
                   >
-                    Remove
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={getImage(movie.Poster)}
+                      alt={movie.Title}
+                    />
+                    <p>{movie.Title}</p>
+
+                    <button
+                      onClick={() =>
+                        removeFav(movie.imdbID)
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p>No favorites yet</p>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* MOVIE DETAILS POPUP */}
+{showPopup && selectedMovie && (
+  <div className="popup" onClick={() => setShowPopup(false)}>
+    <div
+      className="popup-card horizontal"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* LEFT SIDE → IMAGE */}
+      <div className="popup-left">
+        <img
+          src={
+            selectedMovie.Poster !== "N/A"
+              ? selectedMovie.Poster
+              : "https://dummyimage.com/300x450/000/fff&text=No+Image"
+          }
+          alt={selectedMovie.Title}
+        />
+      </div>
+
+      {/* RIGHT SIDE → DETAILS */}
+      <div className="popup-right">
+        <h2>{selectedMovie.Title}</h2>
+
+        <p><b>Year:</b> {selectedMovie.Year}</p>
+        <p><b>Genre:</b> {selectedMovie.Genre}</p>
+        <p><b>Director:</b> {selectedMovie.Director}</p>
+        <p><b>Actors:</b> {selectedMovie.Actors}</p>
+        <p><b>Rating:</b> ⭐ {selectedMovie.imdbRating}</p>
+
+        <p className="plot">{selectedMovie.Plot}</p>
+
+        <button onClick={() => setShowPopup(false)}>
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
